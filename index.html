@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>시니와 윱의 사찰 여행기 🏯</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --moss:    #4a5c3e;
+  --moss-l:  #5d7350;
+  --terra:   #b05a2f;
+  --terra-l: #c97a4a;
+  --gold:    #c4953a;
+  --gold-l:  #e4b85a;
+  --ink:     #1c1510;
+  --ink-s:   #4a3f35;
+  --ink-m:   #8c7b6e;
+  --paper:   #faf7f2;
+  --paper-d: #ede8df;
+  --border:  rgba(74,63,53,0.13);
+  --shadow:  rgba(28,21,16,0.15);
+  --r:       10px;
+  --cbar-h:  74px;  /* 비교 바 높이 */
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: var(--paper); color: var(--ink); overflow: hidden; }
+
+/* ── TOP BAR ── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 900;
+  height: 56px; background: var(--moss);
+  display: flex; align-items: center; gap: 14px; padding: 0 20px;
+  box-shadow: 0 2px 16px rgba(0,0,0,.28);
+}
+.logo { font-family: 'Noto Serif KR', serif; font-size: 16px; font-weight: 700; color: #fff; white-space: nowrap; }
+.logo em { color: var(--gold-l); font-style: normal; }
+.topbar-sep { width: 1px; height: 20px; background: rgba(255,255,255,.2); flex-shrink: 0; }
+.search-wrap { position: relative; flex: 1; max-width: 260px; }
+.search-wrap input {
+  width: 100%; padding: 7px 12px 7px 32px; border-radius: 100px; border: none;
+  background: rgba(255,255,255,.15); color: #fff; font-family: inherit; font-size: 13px;
+}
+.search-wrap input::placeholder { color: rgba(255,255,255,.5); }
+.search-wrap input:focus { outline: none; background: rgba(255,255,255,.25); }
+.search-wrap::before { content: '🔍'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; pointer-events: none; }
+.region-pills { display: flex; gap: 5px; flex-wrap: nowrap; overflow-x: auto; }
+.region-pills::-webkit-scrollbar { display: none; }
+.rpill {
+  padding: 5px 12px; border-radius: 100px; font-size: 11px; font-weight: 500;
+  border: 1.5px solid rgba(255,255,255,.3); color: rgba(255,255,255,.8);
+  background: transparent; cursor: pointer; font-family: inherit; white-space: nowrap; transition: all .15s;
+}
+.rpill:hover, .rpill.on { background: #fff; color: var(--moss); border-color: #fff; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.cnt-badge { background: rgba(255,255,255,.15); color: rgba(255,255,255,.9); padding: 4px 12px; border-radius: 100px; font-size: 11px; border: 1px solid rgba(255,255,255,.2); white-space: nowrap; }
+.cnt-badge strong { color: var(--gold-l); }
+.cmp-top-btn {
+  display: none; padding: 7px 16px; border-radius: 100px;
+  background: var(--terra); color: #fff; border: none; cursor: pointer;
+  font-size: 12px; font-weight: 600; font-family: inherit; white-space: nowrap; transition: background .15s;
+}
+.cmp-top-btn.show { display: block; }
+.cmp-top-btn:hover { background: var(--terra-l); }
+
+/* ── MAP ── */
+#map { position: fixed; top: 56px; left: 0; right: 0; bottom: 0; z-index: 1; }
+.leaflet-container { background: #ddd8cc; }
+
+/* ── MARKER ── */
+.mk {
+  width: 36px; height: 36px; background: var(--moss);
+  border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  border: 2.5px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .2s;
+}
+.mk:hover, .mk.sel { background: var(--terra); }
+.mk-inner { transform: rotate(45deg); font-size: 16px; line-height: 1; }
+.leaflet-popup-content-wrapper {
+  padding: 0; border-radius: var(--r); overflow: hidden;
+  box-shadow: 0 4px 20px var(--shadow); border: 1px solid var(--border); background: var(--paper);
+}
+.leaflet-popup-tip-container { display: none; }
+.pu { min-width: 210px; }
+.pu-body { padding: 12px 14px 10px; }
+.pu-name { font-family: 'Noto Serif KR', serif; font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+.pu-sub { font-size: 11px; color: var(--ink-m); margin-bottom: 8px; }
+.pu-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+.pu-tag { padding: 2px 8px; border-radius: 100px; font-size: 10px; background: var(--paper-d); color: var(--moss); }
+.pu-price { font-family: 'Noto Serif KR', serif; font-size: 15px; font-weight: 700; color: var(--moss); }
+.pu-price small { font-size: 10px; color: var(--ink-m); font-weight: 400; }
+.pu-btn { display: block; width: 100%; padding: 9px; background: var(--moss); color: #fff; border: none; cursor: pointer; font-size: 12px; font-weight: 500; font-family: inherit; text-align: center; transition: background .15s; }
+.pu-btn:hover { background: var(--moss-l); }
+
+/* ── SIDE PANEL ── */
+.panel {
+  position: fixed; top: 56px; right: 0; bottom: 0; z-index: 800;
+  width: 380px; background: var(--paper); border-left: 1px solid var(--border);
+  box-shadow: -6px 0 28px var(--shadow); display: flex; flex-direction: column;
+  transform: translateX(100%); transition: transform .3s cubic-bezier(.4,0,.2,1), bottom .3s;
+}
+.panel.open { transform: translateX(0); }
+/* 비교 바 열릴 때 패널 bottom 올리기 */
+.panel.cbar-open { bottom: var(--cbar-h); }
+
+.panel-close {
+  position: absolute; top: 12px; right: 12px; z-index: 10;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(28,21,16,.08); border: none; cursor: pointer;
+  font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s;
+}
+.panel-close:hover { background: rgba(28,21,16,.18); }
+.p-img { width: 100%; height: 200px; object-fit: cover; flex-shrink: 0; }
+.p-scroll { flex: 1; overflow-y: auto; padding: 18px 20px 120px; }
+.p-scroll::-webkit-scrollbar { width: 4px; }
+.p-scroll::-webkit-scrollbar-thumb { background: var(--ink-m); border-radius: 2px; }
+.p-region { display: inline-block; background: var(--moss); color: #fff; font-size: 10px; font-weight: 500; padding: 3px 10px; border-radius: 100px; margin-bottom: 8px; }
+.p-name { font-family: 'Noto Serif KR', serif; font-size: 20px; font-weight: 700; line-height: 1.3; margin-bottom: 2px; }
+.p-temple { font-size: 12px; color: var(--ink-m); margin-bottom: 6px; }
+.p-rating { display: flex; align-items: center; gap: 5px; margin-bottom: 14px; }
+.p-stars { color: var(--gold); font-size: 13px; }
+.p-rval { font-size: 13px; font-weight: 700; }
+.p-rcnt { font-size: 11px; color: var(--ink-m); }
+.p-desc { font-size: 13px; color: var(--ink-s); line-height: 1.8; margin-bottom: 18px; }
+.sec { font-family: 'Noto Serif KR', serif; font-size: 12px; font-weight: 600; color: var(--ink); border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 10px; }
+.prog-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 16px; }
+.prog-b { padding: 4px 11px; border-radius: 100px; font-size: 11px; background: var(--paper-d); color: var(--moss); border: 1px solid rgba(74,92,62,.22); font-weight: 500; }
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 16px; }
+.ib { background: #fff; border-radius: var(--r); border: 1px solid var(--border); padding: 9px 12px; }
+.ib-l { font-size: 10px; color: var(--ink-m); margin-bottom: 2px; }
+.ib-v { font-size: 12px; font-weight: 600; }
+.revs { display: flex; flex-direction: column; gap: 8px; }
+.rev { background: #fff; border-radius: var(--r); border: 1px solid var(--border); padding: 10px 12px; }
+.rev-h { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.rev-a { font-size: 12px; font-weight: 600; }
+.rev-s { font-size: 11px; color: var(--gold); }
+.rev-t { font-size: 12px; color: var(--ink-s); line-height: 1.6; }
+
+/* ── PANEL FOOTER — 항상 보이도록 ── */
+.p-footer {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 10px 14px 14px;
+  background: #fff;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0,0,0,.06);
+  display: flex; gap: 8px; align-items: center;
+}
+.p-price-w { flex-shrink: 0; }
+.p-price-l { font-size: 9px; color: var(--ink-m); }
+.p-price-v { font-family: 'Noto Serif KR', serif; font-size: 17px; font-weight: 700; color: var(--moss); white-space: nowrap; }
+.p-price-v small { font-size: 9px; font-weight: 400; color: var(--ink-m); }
+
+/* 비교/예약 버튼 — 크고 뚜렷하게 */
+.p-cmp {
+  padding: 11px 16px; border-radius: var(--r);
+  border: 2px solid var(--terra); color: var(--terra);
+  background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; font-family: inherit;
+  transition: all .15s; white-space: nowrap; flex-shrink: 0;
+}
+.p-cmp:hover, .p-cmp.on { background: var(--terra); color: #fff; }
+.p-reserve {
+  flex: 1; padding: 11px; border-radius: var(--r); min-width: 0;
+  background: var(--moss); color: #fff; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 700; font-family: inherit; transition: background .15s;
+}
+.p-reserve:hover { background: var(--moss-l); }
+
+/* ── COMPARE BAR ── */
+.cbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 850;
+  height: var(--cbar-h);
+  background: #fff; border-top: 2px solid var(--terra);
+  box-shadow: 0 -4px 20px var(--shadow);
+  padding: 0 20px;
+  display: flex; align-items: center;
+  transform: translateY(100%); transition: transform .3s;
+}
+.cbar.open { transform: translateY(0); }
+.cbar-inner { max-width: 900px; margin: 0 auto; width: 100%; display: flex; gap: 10px; align-items: center; }
+.cbar-slots { display: flex; gap: 8px; flex: 1; }
+.cslot {
+  flex: 1; border: 2px dashed var(--border); border-radius: var(--r);
+  padding: 8px 12px; display: flex; align-items: center; justify-content: center;
+  height: 48px; gap: 8px;
+}
+.cslot.filled { border-style: solid; border-color: var(--moss); background: var(--paper); }
+.cslot-name { font-size: 12px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cslot-rm { width: 18px; height: 18px; border-radius: 50%; background: var(--terra); color: #fff; border: none; cursor: pointer; font-size: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.cslot-empty { font-size: 11px; color: var(--ink-m); }
+.cbar-go { padding: 10px 22px; background: var(--terra); color: #fff; border: none; border-radius: var(--r); font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background .15s; }
+.cbar-go:hover { background: var(--terra-l); }
+.cbar-clr { padding: 10px 14px; border: 1.5px solid var(--border); color: var(--ink-m); border-radius: var(--r); cursor: pointer; background: transparent; font-size: 12px; font-family: inherit; white-space: nowrap; }
+
+/* ── LEGEND ── */
+.legend {
+  position: fixed; bottom: 20px; left: 16px; z-index: 700;
+  background: rgba(250,247,242,.95); backdrop-filter: blur(8px);
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 10px 14px; box-shadow: 0 3px 14px var(--shadow);
+  transition: bottom .3s;
+}
+.legend.cbar-open { bottom: calc(var(--cbar-h) + 12px); }
+.legend-t { font-size: 10px; font-weight: 600; color: var(--ink-m); margin-bottom: 6px; letter-spacing: .05em; }
+.legend-row { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--ink-s); margin-bottom: 3px; }
+.ldot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+@media (max-width: 600px) {
+  .panel { width: 100%; }
+  .region-pills { display: none; }
+  .cbar-slots { gap: 5px; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">🏯 <em>시니</em>와 <em>윱</em>의 사찰 여행기</div>
+  <div class="topbar-sep"></div>
+  <div class="search-wrap"><input id="srch" type="text" placeholder="사찰명 검색..."></div>
+  <div class="region-pills" id="rpills"></div>
+  <div class="topbar-right">
+    <div class="cnt-badge">전국 <strong id="vcnt">30</strong>개 사찰</div>
+    <button class="cmp-top-btn" id="cmp-top-btn" onclick="openCmpWindow()">⚖️ 비교 분석 (<span id="cmp-cnt">0</span>)</button>
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- LEGEND -->
+<div class="legend" id="legend">
+  <div class="legend-t">마커 안내</div>
+  <div class="legend-row"><div class="ldot" style="background:#4a5c3e"></div>템플스테이 사찰</div>
+  <div class="legend-row"><div class="ldot" style="background:#b05a2f"></div>선택된 사찰</div>
+  <div style="font-size:9px;color:var(--ink-m);margin-top:5px;">마커 클릭 → 상세 정보</div>
+</div>
+
+<!-- SIDE PANEL -->
+<div class="panel" id="panel">
+  <button class="panel-close" onclick="closePanel()">✕</button>
+  <img class="p-img" id="p-img" src="" alt="">
+  <div class="p-scroll">
+    <span class="p-region" id="p-region"></span>
+    <div class="p-name" id="p-name"></div>
+    <div class="p-temple" id="p-temple"></div>
+    <div class="p-rating" id="p-rating"></div>
+    <div class="p-desc" id="p-desc"></div>
+    <div class="sec">🌿 프로그램</div>
+    <div class="prog-row" id="p-progs"></div>
+    <div class="sec">📋 상세 정보</div>
+    <div class="info-grid" id="p-info"></div>
+    <div class="sec">💬 방문 후기</div>
+    <div class="revs" id="p-revs"></div>
+  </div>
+  <!-- 푸터: 항상 패널 맨 아래에 고정 -->
+  <div class="p-footer">
+    <div class="p-price-w">
+      <div class="p-price-l">1박 2일 · 1인</div>
+      <div class="p-price-v" id="p-price">—</div>
+    </div>
+    <button class="p-cmp" id="p-cmp" onclick="toggleCmp()">＋ 비교</button>
+    <button class="p-reserve" onclick="reserveNow()">예약하기 →</button>
+  </div>
+</div>
+
+<!-- COMPARE BAR -->
+<div class="cbar" id="cbar">
+  <div class="cbar-inner">
+    <div class="cbar-slots" id="cslots"></div>
+    <button class="cbar-go" onclick="openCmpWindow()">⚖️ 비교 분석 열기</button>
+    <button class="cbar-clr" onclick="clearCmp()">초기화</button>
+  </div>
+</div>
+
+<script>
+/* ── DATA ── */
+const T = [
+  { id:1,  name:"팔만대장경의 품",    temple:"해인사",   region:"경상남도",       lat:35.7969, lng:128.1058, price:70000, rating:4.8, reviews:312,
+    desc:"팔만대장경을 품은 천년 고찰. 가야산 깊은 곳에서 새벽 3시 예불 소리와 함께 하루를 여는 특별한 경험. 정갈한 사찰 음식이 지친 몸과 마음을 치유합니다.",
+    programs:["새벽예불","발우공양","108배","스님 차담","경행"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"김○○",s:5,t:"새벽 예불이 정말 감동이었어요. 인생의 큰 울림이 됐습니다."},{a:"이○○",s:4,t:"와이파이 없는 게 오히려 디지털 디톡스가 되어 좋았어요."}]},
+  { id:2,  name:"도심 속 고요함",     temple:"조계사",   region:"서울",           lat:37.5750, lng:126.9815, price:40000, rating:4.5, reviews:528,
+    desc:"서울 한복판에서 찾는 고요함. 바쁜 일상 속에서도 잠시 멈춰 설 수 있는 특별한 공간.",
+    programs:["참선","다도","연등 만들기","스님 차담","108배"],
+    f:{stay:true,meal:true,wifi:true,parking:false},
+    img:"https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"최○○",s:5,t:"참선 후 일주일 피로가 싹 풀리는 느낌이에요!"},{a:"정○○",s:4,t:"연등 만들기가 너무 재미있었어요. 아이와 함께 오기 좋아요."}]},
+  { id:3,  name:"선방 깊은 수행",     temple:"송광사",   region:"전라남도",       lat:35.0086, lng:127.2867, price:80000, rating:4.9, reviews:189,
+    desc:"한국 불교 3보 사찰 중 하나. 스님들의 일상과 함께하는 가장 진정성 있는 템플스테이.",
+    programs:["새벽예불","발우공양","참선","울력","경행","108배"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1513407030348-c983a97b98d8?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"강○○",s:5,t:"1박 2일이 너무 짧게 느껴졌어요. 꼭 다시 오고 싶습니다."},{a:"윤○○",s:5,t:"울력이 처음엔 낯설었지만 공동체 의미를 깊이 느꼈습니다."}]},
+  { id:4,  name:"세계유산 새벽 산책", temple:"불국사",   region:"경상북도",       lat:35.7900, lng:129.3310, price:60000, rating:4.5, reviews:398,
+    desc:"유네스코 세계문화유산. 다보탑·석가탑과 함께하는 새벽 예불, 석굴암까지 이어지는 새벽 산책 코스가 인기.",
+    programs:["새벽예불","석굴암 새벽 산책","발우공양","스님 차담","108배"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"조○○",s:5,t:"세계문화유산에서 하룻밤! 석굴암 새벽 산책 강력 추천합니다."},{a:"임○○",s:4,t:"시설이 깔끔하고 다양한 프로그램이 좋았어요."}]},
+  { id:5,  name:"동해 일출 참선",     temple:"낙산사",   region:"강원도",         lat:38.0765, lng:128.6368, price:65000, rating:4.7, reviews:241,
+    desc:"동해 바다가 내려다보이는 절경 속 낙산사. 의상대에서 바라보는 일출은 국내 최고.",
+    programs:["새벽예불","참선","해돋이 명상","다도","경행"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1506461883276-594a12b11cf3?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"한○○",s:5,t:"의상대 일출이 환상적이었어요. 인생 일출!"},{a:"오○○",s:4,t:"바다 바람과 함께하는 참선, 정말 힐링이었습니다."}]},
+  { id:6,  name:"전나무 숲 명상",     temple:"월정사",   region:"강원도",         lat:37.6125, lng:128.5625, price:75000, rating:4.8, reviews:203,
+    desc:"오대산 500년 된 전나무 숲길로 유명한 월정사. 숲 속 경행은 월정사에서만 경험할 수 있는 특별한 프로그램.",
+    programs:["새벽예불","숲 명상","경행","108배","발우공양","다도"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1448375240586-882707db888b?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"배○○",s:5,t:"전나무 숲 경행이 정말 힐링이에요!"},{a:"류○○",s:5,t:"적광전 앞 108배, 몸도 마음도 가벼워졌어요."}]},
+  { id:7,  name:"전통 도자기 체험",   temple:"통도사",   region:"경상남도",       lat:35.4892, lng:129.0597, price:90000, rating:4.6, reviews:155,
+    desc:"불보 사찰 통도사의 도자기 체험과 선 수행의 만남. 직접 빚은 도자기를 가져갈 수 있습니다.",
+    programs:["새벽예불","발우공양","도자기 체험","스님 차담","사경"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"서○○",s:5,t:"직접 만든 다기로 차를 마시니 더 맛있어요!"},{a:"문○○",s:4,t:"통도사의 규모와 역사에 압도됐습니다."}]},
+  { id:8,  name:"사찰 음식 클래스",   temple:"선운사",   region:"전라북도",       lat:35.5714, lng:126.5928, price:85000, rating:4.7, reviews:167,
+    desc:"고창 선운사의 전통 사찰 음식 만들기. 무농약 채소와 발효 식품의 지혜를 배울 수 있습니다.",
+    programs:["사찰 음식 만들기","발우공양","새벽예불","다도","꽃무릇 산책"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"고○○",s:5,t:"사찰 음식 수업이 유익했어요. 집에서도 따라 하고 있어요!"},{a:"남○○",s:4,t:"꽃무릇 피는 시기 방문. 정말 아름다웠어요."}]},
+  { id:9,  name:"지리산 극락전",      temple:"화엄사",   region:"전라남도",       lat:35.2436, lng:127.5078, price:70000, rating:4.7, reviews:178,
+    desc:"지리산 자락 화엄사. 각황전 등 국보급 문화재를 품고 있습니다. 지리산의 맑은 물과 공기 속에서 진정한 휴식을.",
+    programs:["새벽예불","발우공양","참선","경행","스님 차담"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"권○○",s:5,t:"지리산 속 화엄사에서의 하룻밤은 정말 특별했습니다."},{a:"황○○",s:4,t:"각황전 앞 예불이 정말 엄숙하고 아름다워요."}]},
+  { id:10, name:"충청의 선 수행",     temple:"수덕사",   region:"충청남도",       lat:36.6194, lng:126.6639, price:55000, rating:4.6, reviews:234,
+    desc:"덕숭산 수덕사. 현존하는 가장 아름다운 고려시대 건축물 중 하나. 조용하고 깊은 선 수행의 본산.",
+    programs:["새벽예불","참선","108배","발우공양","사경"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"신○○",s:5,t:"수덕사 대웅전의 아름다움에 감탄했습니다."},{a:"유○○",s:4,t:"참선 지도 스님이 정말 친절하셨어요."}]},
+  { id:11, name:"마곡사의 봄",        temple:"마곡사",   region:"충청남도",       lat:36.5297, lng:126.9078, price:60000, rating:4.5, reviews:189,
+    desc:"백제 문화권 마곡사. 봄이면 벚꽃과 진달래가 장관. 김구 선생이 머물기도 한 역사의 사찰.",
+    programs:["새벽예불","발우공양","참선","봄 산책","108배"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1543968996-ee822b8176ba?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"천○○",s:5,t:"봄에 방문했는데 꽃과 함께하는 경행이 최고였어요!"},{a:"구○○",s:4,t:"역사적 의미도 깊고 자연 환경도 훌륭해요."}]},
+  { id:12, name:"부석 위의 절",       temple:"부석사",   region:"경상북도",       lat:36.9525, lng:128.6619, price:65000, rating:4.8, reviews:267,
+    desc:"소백산 자락 부석사는 한국에서 가장 아름다운 사찰로 손꼽힙니다. 안양루에서 바라보는 소백산 일몰은 잊을 수 없는 장면.",
+    programs:["새벽예불","발우공양","참선","일몰 명상","경행"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1512389142860-9c449e58a543?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"변○○",s:5,t:"안양루 일몰은 인생 최고의 풍경이었습니다."},{a:"나○○",s:5,t:"가을 단풍과 함께한 부석사는 환상적이었어요."}]},
+  { id:13, name:"법주사 미륵",        temple:"법주사",   region:"충청북도",       lat:36.5358, lng:127.8631, price:65000, rating:4.6, reviews:198,
+    desc:"속리산 법주사. 거대한 금동미륵불상과 속리산 오리 숲길을 걸어 도착하는 사찰 여정이 특별합니다.",
+    programs:["새벽예불","발우공양","참선","오리 숲길 경행","108배"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1574271143515-5cddf8da19be?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"도○○",s:5,t:"오리 숲길을 걸어 도착하는 경험 자체가 힐링이에요."},{a:"엄○○",s:4,t:"미륵불상 앞 108배가 정말 특별했습니다."}]},
+  { id:14, name:"천년 목조 건축",     temple:"봉정사",   region:"경상북도",       lat:36.5331, lng:128.7550, price:55000, rating:4.7, reviews:143,
+    desc:"현존 최고(最古) 목조 건축물을 품은 봉정사. 유네스코 세계유산. 천년의 역사를 느껴보세요.",
+    programs:["새벽예불","참선","발우공양","문화재 해설","사경"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1532274402911-5a369e4c4bb5?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"맹○○",s:5,t:"천년의 역사가 살아 숨쉬는 곳. 경건한 마음이 생겨요."},{a:"석○○",s:4,t:"문화재 해설 스님의 설명이 정말 흥미로웠어요."}]},
+  { id:15, name:"팔공산 기도 도량",   temple:"동화사",   region:"대구광역시",     lat:35.9219, lng:128.6578, price:60000, rating:4.5, reviews:221,
+    desc:"팔공산 기도 도량 동화사. 갓바위 부처님을 향한 새벽 기도와 함께하는 소원 성취 프로그램.",
+    programs:["새벽예불","갓바위 순례","참선","발우공양","108배"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1501854140801-50d01698950b?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"금○○",s:5,t:"갓바위까지 새벽에 올라가는 길이 감동적이었어요."},{a:"홍○○",s:4,t:"기도 분위기가 정말 좋습니다."}]},
+  { id:16, name:"강남 연등 아래",     temple:"봉은사",   region:"서울",           lat:37.5153, lng:127.0572, price:45000, rating:4.4, reviews:312,
+    desc:"강남 한복판의 천년 고찰. 현대 도시와 전통 사찰이 공존하는 특별한 공간. 연등 아래서의 명상이 인기.",
+    programs:["참선","다도","연등 명상","스님 차담","108배"],
+    f:{stay:true,meal:true,wifi:true,parking:false},
+    img:"https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"공○○",s:5,t:"강남 한복판에 이런 고요함이! 자주 오고 싶어요."},{a:"방○○",s:4,t:"연등 아래 명상은 정말 특별한 경험이었습니다."}]},
+  { id:17, name:"범어 숲의 새벽",     temple:"범어사",   region:"부산광역시",     lat:35.2878, lng:129.0475, price:60000, rating:4.6, reviews:198,
+    desc:"금정산 범어사. 부산 시민의 정신적 안식처. 빽빽한 소나무 숲과 함께하는 새벽 예불이 특별합니다.",
+    programs:["새벽예불","발우공양","참선","금정산 경행","108배"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1513360371669-4adf3dd7dff8?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"위○○",s:5,t:"부산에서 이렇게 깊은 산사 분위기라니 놀랍네요."},{a:"탁○○",s:4,t:"범어사 숲길 경행이 정말 상쾌했습니다."}]},
+  { id:18, name:"고려 왕실의 기도처", temple:"전등사",   region:"인천광역시",     lat:37.6219, lng:126.4244, price:50000, rating:4.5, reviews:167,
+    desc:"강화도 전등사. 우리나라에서 가장 오래된 사찰 중 하나. 고려 왕실의 기도처였던 역사의 공간.",
+    programs:["새벽예불","참선","발우공양","사경","강화 역사 탐방"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1499678329028-101435549a4e?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"갈○○",s:5,t:"강화도 역사 탐방과 함께하면 더욱 풍부한 경험이에요."},{a:"추○○",s:4,t:"바다 가까이에서 하는 새벽 예불이 특별했습니다."}]},
+  { id:19, name:"설악 청동불의 새벽", temple:"신흥사",   region:"강원도",         lat:38.1625, lng:128.4631, price:70000, rating:4.7, reviews:189,
+    desc:"설악산 신흥사. 우리나라에서 가장 큰 청동불상인 통일대불이 있으며 가을 단풍이 절경.",
+    programs:["새벽예불","발우공양","설악 경행","참선","108배"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1545308208-b5a86c54a0e8?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"탄○○",s:5,t:"가을 단풍 속 신흥사는 천국 같은 곳이었어요."},{a:"편○○",s:4,t:"통일대불 앞 108배가 정말 감동적이었습니다."}]},
+  { id:20, name:"한라산 기슭의 고요", temple:"관음사",   region:"제주특별자치도", lat:33.4833, lng:126.5500, price:55000, rating:4.6, reviews:143,
+    desc:"한라산 기슭 관음사. 제주 최대 사찰. 한라산 등반 전후로 찾는 순례객들이 많습니다.",
+    programs:["새벽예불","발우공양","참선","한라산 산책","다도"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"태○○",s:5,t:"한라산 기슭에서 맞이하는 새벽이 정말 특별했어요."},{a:"하○○",s:4,t:"제주 특색 사찰 음식이 정말 맛있었습니다."}]},
+  { id:21, name:"동양 최대 대법당",   temple:"약천사",   region:"제주특별자치도", lat:33.2500, lng:126.4167, price:60000, rating:4.5, reviews:121,
+    desc:"동양 최대 규모의 대적광전을 보유한 약천사. 제주 남쪽 바다를 바라보는 절경 속 사찰 체험.",
+    programs:["새벽예불","발우공양","참선","해안 경행","연꽃 만들기"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1596895111956-bf1cf0599ce5?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"선○○",s:5,t:"동양 최대 법당에서의 예불은 정말 웅장했습니다."},{a:"경○○",s:4,t:"제주 바다가 보이는 경행 코스가 너무 아름다워요."}]},
+  { id:22, name:"직지 선풍",          temple:"직지사",   region:"경상북도",       lat:36.1161, lng:128.1525, price:60000, rating:4.5, reviews:156,
+    desc:"황악산 직지사. 세계 최초 금속활자 직지심체요절과 관련 깊은 사찰. 선종 수행 전통이 살아있는 곳.",
+    programs:["새벽예불","참선","발우공양","직지 역사 탐방","108배"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1553361371-9b22f78e8b1d?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"장○○",s:4,t:"직지심체요절 역사를 들으며 더 의미 있는 시간이 됐어요."},{a:"전○○",s:5,t:"선종 수행 분위기가 정말 깊고 좋습니다."}]},
+  { id:23, name:"지리산 벚꽃 길",     temple:"쌍계사",   region:"경상남도",       lat:35.2939, lng:127.5744, price:65000, rating:4.7, reviews:178,
+    desc:"지리산 쌍계사. 봄이면 쌍계사 벚꽃 길이 전국 최고로 손꼽힙니다.",
+    programs:["새벽예불","발우공양","참선","벚꽃 경행","다도"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1522383225653-ed111181a951?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"차○○",s:5,t:"봄 벚꽃 쌍계사 경행은 정말 잊을 수 없어요."},{a:"표○○",s:4,t:"지리산 청정 공기와 맑은 계곡 소리가 너무 좋았습니다."}]},
+  { id:24, name:"두륜산 달마고도",    temple:"대흥사",   region:"전라남도",       lat:34.4956, lng:126.5478, price:70000, rating:4.7, reviews:167,
+    desc:"해남 두륜산 대흥사. 임진왜란 서산대사의 본찰. 달마고도 트레킹과 함께하는 코스가 유명.",
+    programs:["새벽예불","발우공양","달마고도 트레킹","참선","차 명상"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"국○○",s:5,t:"달마고도 트레킹과 함께하는 대흥사 — 최고의 조합!"},{a:"모○○",s:4,t:"남도 끝자락의 고즈넉한 사찰에서 진정한 쉼을 찾았습니다."}]},
+  { id:25, name:"재약산 폭포 아래",   temple:"표충사",   region:"경상남도",       lat:35.5031, lng:128.5197, price:60000, rating:4.5, reviews:134,
+    desc:"밀양 재약산 표충사. 영남의 알프스 재약산의 절경 속 사찰. 임진왜란 의승병의 본거지.",
+    programs:["새벽예불","발우공양","참선","재약산 경행","사명대사 역사"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1548013146-72479768bada?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"주○○",s:5,t:"재약산 폭포와 함께하는 경행이 정말 시원했습니다."},{a:"위○○",s:4,t:"사명대사 역사 설명이 정말 흥미로웠어요."}]},
+  { id:26, name:"백양사 단풍",        temple:"백양사",   region:"전라남도",       lat:35.5158, lng:126.8892, price:65000, rating:4.8, reviews:189,
+    desc:"장성 백양사는 가을 단풍이 전국 최고. 쌍계루와 단풍이 어우러진 풍경은 한 폭의 그림.",
+    programs:["새벽예불","발우공양","단풍 경행","참선","108배"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"오○○",s:5,t:"가을 단풍 시즌 백양사는 정말 천국이에요!"},{a:"두○○",s:5,t:"쌍계루 앞 단풍 경행은 잊을 수 없는 경험입니다."}]},
+  { id:27, name:"북한산 숲속 사찰",   temple:"흥국사",   region:"경기도",         lat:37.6833, lng:126.9667, price:45000, rating:4.4, reviews:145,
+    desc:"북한산 자락의 흥국사. 수도권에서 가장 접근하기 좋은 산사. 도심 탈출과 산사 체험을 동시에.",
+    programs:["참선","다도","108배","북한산 경행","연등 만들기"],
+    f:{stay:true,meal:true,wifi:true,parking:true},
+    img:"https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"호○○",s:4,t:"서울에서 30분인데 이렇게 깊은 산속 분위기라니!"},{a:"신○○",s:5,t:"북한산 경행 코스가 정말 아름다웠습니다."}]},
+  { id:28, name:"정원의 고요한 선",   temple:"길상사",   region:"서울",           lat:37.5975, lng:126.9958, price:35000, rating:4.6, reviews:289,
+    desc:"성북동 고급 요정을 사찰로 바꾼 감동적인 이야기의 길상사. 도심 속 아름다운 정원과 함께하는 선 수행.",
+    programs:["참선","다도","스님 법문","정원 경행","108배"],
+    f:{stay:true,meal:true,wifi:true,parking:false},
+    img:"https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"하○○",s:5,t:"길상사의 스토리를 알고 가면 더욱 감동적인 공간입니다."},{a:"은○○",s:5,t:"아름다운 정원에서의 경행이 너무 좋았어요."}]},
+  { id:29, name:"DMZ 최북단 사찰",    temple:"건봉사",   region:"강원도",         lat:38.3833, lng:128.3167, price:65000, rating:4.6, reviews:98,
+    desc:"DMZ 인근 최북단 사찰 건봉사. 부처님 진신치아 사리를 봉안한 유서 깊은 곳.",
+    programs:["새벽예불","발우공양","DMZ 역사 탐방","참선","경행"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1516912481808-3406841bd33c?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"기○○",s:5,t:"최북단 사찰이라는 역사적 의미가 더해져 특별했어요."},{a:"찬○○",s:4,t:"DMZ 인근의 독특한 자연 환경이 인상적이었습니다."}]},
+  { id:30, name:"소백산 희방사",      temple:"희방사",   region:"경상북도",       lat:36.8981, lng:128.5744, price:55000, rating:4.5, reviews:112,
+    desc:"소백산 희방사는 희방폭포와 함께합니다. 겨울 설경이 특히 아름다운 사찰.",
+    programs:["새벽예불","참선","발우공양","희방폭포 경행","108배"],
+    f:{stay:true,meal:true,wifi:false,parking:true},
+    img:"https://images.unsplash.com/photo-1551582045-6ec9c11d8697?w=700&q=80",
+    link:"https://www.templestay.com/",
+    revs:[{a:"라○○",s:5,t:"겨울 설경 속 희방사는 정말 환상적이었어요."},{a:"마○○",s:4,t:"희방폭포 경행 코스가 정말 아름다웠습니다."}]}
+];
+
+/* ── MAP ── */
+const map = L.map('map', { center:[36.5,127.8], zoom:7, zoomControl:true, attributionControl:false });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18, opacity:0.82 }).addTo(map);
+
+const mkrs = {};
+let cur = null, cmpList = [], activeReg = '';
+
+function makeIcon(sel=false) {
+  return L.divIcon({
+    className:'',
+    html:`<div class="mk${sel?' sel':''}"><div class="mk-inner">🏯</div></div>`,
+    iconSize:[36,36], iconAnchor:[18,36], popupAnchor:[0,-38]
+  });
+}
+function st(r){ return '★'.repeat(Math.floor(r))+(r%1>=0.5?'☆':'')+'☆'.repeat(5-Math.ceil(r)); }
+
+/* ── MARKERS ── */
+function renderMkrs(list) {
+  Object.values(mkrs).forEach(m=>m.remove());
+  Object.keys(mkrs).forEach(k=>delete mkrs[k]);
+  document.getElementById('vcnt').textContent = list.length;
+  list.forEach(t => {
+    const m = L.marker([t.lat,t.lng],{icon:makeIcon()}).addTo(map);
+    m.bindPopup(`<div class="pu">
+      <div class="pu-body">
+        <div class="pu-name">${t.temple} — ${t.name}</div>
+        <div class="pu-sub">📍 ${t.region} · 1박 2일</div>
+        <div class="pu-tags">${t.programs.slice(0,3).map(p=>`<span class="pu-tag">${p}</span>`).join('')}</div>
+        <div class="pu-price">${t.price.toLocaleString()}원 <small>/ 1인</small></div>
+      </div>
+      <button class="pu-btn" onclick="openPanel(${t.id})">상세 보기 →</button>
+    </div>`,{maxWidth:230,minWidth:220});
+    m.on('click',()=>openPanel(t.id));
+    mkrs[t.id] = m;
+  });
+}
+
+/* ── PANEL ── */
+function openPanel(id) {
+  const t = T.find(x=>x.id===id); if(!t) return; cur = t;
+  Object.entries(mkrs).forEach(([mid,m])=>m.setIcon(makeIcon(Number(mid)===id)));
+  document.getElementById('p-img').src   = t.img;
+  document.getElementById('p-region').textContent = t.region;
+  document.getElementById('p-name').textContent   = t.name;
+  document.getElementById('p-temple').textContent  = `${t.temple} · 1박 2일`;
+  document.getElementById('p-desc').textContent   = t.desc;
+  document.getElementById('p-rating').innerHTML =
+    `<span class="p-stars">${st(t.rating)}</span><span class="p-rval">${t.rating}</span><span class="p-rcnt">(${t.reviews}개 후기)</span>`;
+  document.getElementById('p-progs').innerHTML = t.programs.map(p=>`<span class="prog-b">${p}</span>`).join('');
+  document.getElementById('p-info').innerHTML = `
+    <div class="ib"><div class="ib-l">💰 가격</div><div class="ib-v">${t.price.toLocaleString()}원</div></div>
+    <div class="ib"><div class="ib-l">⏱ 기간</div><div class="ib-v">1박 2일</div></div>
+    <div class="ib"><div class="ib-l">🛏 숙박</div><div class="ib-v">${t.f.stay?'✅ 포함':'❌ 미포함'}</div></div>
+    <div class="ib"><div class="ib-l">🍚 식사</div><div class="ib-v">${t.f.meal?'✅ 포함':'❌ 미포함'}</div></div>
+    <div class="ib"><div class="ib-l">📶 와이파이</div><div class="ib-v">${t.f.wifi?'✅ 가능':'❌ 불가'}</div></div>
+    <div class="ib"><div class="ib-l">🚗 주차</div><div class="ib-v">${t.f.parking?'✅ 가능':'❌ 불가'}</div></div>`;
+  document.getElementById('p-revs').innerHTML = t.revs.map(r=>`
+    <div class="rev">
+      <div class="rev-h"><span class="rev-a">${r.a}</span><span class="rev-s">${'★'.repeat(r.s)}${'☆'.repeat(5-r.s)}</span></div>
+      <div class="rev-t">${r.t}</div>
+    </div>`).join('');
+  document.getElementById('p-price').innerHTML = `${t.price.toLocaleString()}원 <small>/ 1인</small>`;
+  refreshCmpBtn();
+  document.getElementById('panel').classList.add('open');
+  map.setView([t.lat,t.lng],Math.max(map.getZoom(),10),{animate:true});
+}
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+  Object.values(mkrs).forEach(m=>m.setIcon(makeIcon(false)));
+  cur = null;
+}
+function reserveNow() { if(cur) window.open(cur.link,'_blank'); }
+function refreshCmpBtn() {
+  if(!cur) return;
+  const inList = cmpList.includes(cur.id);
+  const btn = document.getElementById('p-cmp');
+  btn.textContent = inList ? '✓ 비교중' : '＋ 비교';
+  btn.className = 'p-cmp' + (inList?' on':'');
+}
+
+/* ── COMPARE ── */
+function toggleCmp() {
+  if(!cur) return;
+  if(cmpList.includes(cur.id)) { cmpList = cmpList.filter(x=>x!==cur.id); }
+  else {
+    if(cmpList.length>=3){ alert('최대 3개까지 비교할 수 있습니다.'); return; }
+    cmpList.push(cur.id);
+  }
+  refreshCmpBtn(); updateCbar();
+}
+function updateCbar() {
+  const bar = document.getElementById('cbar');
+  const panel = document.getElementById('panel');
+  const legend = document.getElementById('legend');
+  const topBtn = document.getElementById('cmp-top-btn');
+  document.getElementById('cmp-cnt').textContent = cmpList.length;
+  const open = cmpList.length > 0;
+  if(open){ bar.classList.add('open'); topBtn.classList.add('show'); panel.classList.add('cbar-open'); legend.classList.add('cbar-open'); }
+  else { bar.classList.remove('open'); topBtn.classList.remove('show'); panel.classList.remove('cbar-open'); legend.classList.remove('cbar-open'); }
+
+  const slots = [...cmpList]; while(slots.length<3) slots.push(null);
+  document.getElementById('cslots').innerHTML = slots.map((id,i)=>{
+    if(!id) return `<div class="cslot"><span class="cslot-empty">＋ 사찰 선택 (${i+1}/3)</span></div>`;
+    const t = T.find(x=>x.id===id);
+    return `<div class="cslot filled"><span class="cslot-name">${t.temple}</span><button class="cslot-rm" onclick="removeCmp(${id})">✕</button></div>`;
+  }).join('');
+}
+function removeCmp(id){ cmpList=cmpList.filter(x=>x!==id); updateCbar(); if(cur&&cur.id===id) refreshCmpBtn(); }
+function clearCmp(){ cmpList=[]; updateCbar(); if(cur) refreshCmpBtn(); }
+
+/* ── 비교 분석 → 새 창으로 열기 ── */
+function openCmpWindow() {
+  if(cmpList.length < 2){ alert('비교하려면 최소 2개를 선택하세요.\n\n① 지도에서 사찰 마커 클릭\n② 오른쪽 패널 아래 [＋ 비교] 버튼 클릭\n③ 2~3개 선택 후 비교 분석 버튼 클릭'); return; }
+  const ts = cmpList.map(id=>T.find(t=>t.id===id));
+  const bp = Math.min(...ts.map(t=>t.price));
+  const br = Math.max(...ts.map(t=>t.rating));
+  const bv = Math.max(...ts.map(t=>t.reviews));
+
+  const heads = ts.map(t=>`<th style="background:#4a5c3e;color:#fff;padding:14px 16px;text-align:center;font-size:14px;font-weight:700;">${t.temple}<br><span style="font-weight:400;font-size:11px;">${t.name}</span></th>`).join('');
+  const rows = [
+    ['지역',     ts.map(t=>t.region)],
+    ['가격 (1인)', ts.map(t=>({best:t.price===bp, fmt:t.price.toLocaleString()+'원'}))],
+    ['별점',     ts.map(t=>({best:t.rating===br, fmt:`${st(t.rating)} ${t.rating}`}))],
+    ['후기 수',  ts.map(t=>({best:t.reviews===bv, fmt:t.reviews+'개'}))],
+    ['숙박',     ts.map(t=>t.f.stay?'✅ 포함':'❌ 미포함')],
+    ['식사',     ts.map(t=>t.f.meal?'✅ 포함':'❌ 미포함')],
+    ['와이파이', ts.map(t=>t.f.wifi?'✅ 가능':'❌ 불가')],
+    ['주차',     ts.map(t=>t.f.parking?'✅ 가능':'❌ 불가')],
+    ['프로그램', ts.map(t=>t.programs.map(p=>`<span style="display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;background:#ede8df;color:#4a5c3e;border:1px solid rgba(74,92,62,.2);margin:2px;">${p}</span>`).join(''))],
+  ];
+  const tbody = rows.map(([lbl,vals])=>{
+    const tds = vals.map(v=>{
+      if(typeof v==='object'&&'best' in v)
+        return `<td style="padding:12px 16px;border-bottom:1px solid #e8e2d8;color:${v.best?'#4a5c3e':'#4a3f35'};font-weight:${v.best?'700':'400'};font-size:13px;">${v.best?'🏆 ':''} ${v.fmt}</td>`;
+      return `<td style="padding:12px 16px;border-bottom:1px solid #e8e2d8;font-size:13px;color:#4a3f35;">${v}</td>`;
+    }).join('');
+    return `<tr><th style="background:#ede8df;padding:12px 16px;font-size:12px;font-weight:600;text-align:left;border-bottom:1px solid #e8e2d8;white-space:nowrap;">${lbl}</th>${tds}</tr>`;
+  }).join('');
+
+  const imgs = ts.map(t=>`
+    <div style="flex:1;min-width:0;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e8e2d8;box-shadow:0 2px 12px rgba(28,21,16,.1);">
+      <img src="${t.img}" style="width:100%;height:140px;object-fit:cover;" alt="">
+      <div style="padding:12px 14px;">
+        <div style="font-family:'Noto Serif KR',serif;font-size:15px;font-weight:700;margin-bottom:3px;">${t.temple}</div>
+        <div style="font-size:11px;color:#8c7b6e;margin-bottom:8px;">${t.region} · ${t.name}</div>
+        <div style="color:#c4953a;font-size:13px;margin-bottom:10px;">${st(t.rating)} ${t.rating} (${t.reviews}개)</div>
+        <a href="${t.link}" target="_blank" style="display:block;text-align:center;padding:9px;background:#4a5c3e;color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;">예약하기 →</a>
+      </div>
+    </div>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>사찰 비교 분석 🏯</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans KR',sans-serif;background:#faf7f2;color:#1c1510;padding:0;}
+  .header{background:#4a5c3e;padding:20px 32px;display:flex;align-items:center;gap:12px;}
+  .header h1{font-family:'Noto Serif KR',serif;font-size:20px;font-weight:700;color:#fff;}
+  .header h1 em{color:#e4b85a;font-style:normal;}
+  .body{max-width:900px;margin:0 auto;padding:32px 24px 60px;}
+  h2{font-family:'Noto Serif KR',serif;font-size:18px;font-weight:700;margin-bottom:16px;color:#1c1510;}
+  .cards{display:flex;gap:16px;margin-bottom:32px;flex-wrap:wrap;}
+  .table-wrap{overflow-x:auto;border-radius:12px;box-shadow:0 2px 16px rgba(28,21,16,.1);}
+  table{width:100%;border-collapse:collapse;background:#fff;}
+  .note{font-size:11px;color:#8c7b6e;margin-top:12px;}
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-thumb{background:#8c7b6e;border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="header"><h1>🏯 <em>시니</em>와 <em>윱</em>의 사찰 여행기 — 비교 분석</h1></div>
+<div class="body">
+  <h2>선택한 사찰</h2>
+  <div class="cards">${imgs}</div>
+  <h2>항목별 비교</h2>
+  <div class="table-wrap">
+    <table><thead><tr><th style="background:#ede8df;padding:14px 16px;"></th>${heads}</tr></thead>
+    <tbody>${tbody}</tbody></table>
+  </div>
+  <p class="note">💡 🏆 표시는 해당 항목에서 가장 좋은 값입니다.</p>
+</div>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=960,height=800,scrollbars=yes');
+  w.document.write(html);
+  w.document.close();
+}
+
+/* ── FILTERS ── */
+const regions = [...new Set(T.map(t=>t.region))].sort();
+const rpills = document.getElementById('rpills');
+regions.forEach(r => {
+  const b = document.createElement('button');
+  b.className='rpill'; b.textContent=r;
+  b.onclick = () => {
+    activeReg = activeReg===r?'':r;
+    document.querySelectorAll('.rpill').forEach(p=>p.classList.remove('on'));
+    if(activeReg) b.classList.add('on');
+    applyFilter();
+  };
+  rpills.appendChild(b);
+});
+document.getElementById('srch').addEventListener('input', applyFilter);
+function applyFilter() {
+  const q = document.getElementById('srch').value.toLowerCase();
+  renderMkrs(T.filter(t => {
+    if(activeReg && t.region!==activeReg) return false;
+    if(q && !t.temple.toLowerCase().includes(q) && !t.name.toLowerCase().includes(q) && !t.region.toLowerCase().includes(q)) return false;
+    return true;
+  }));
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') closePanel(); });
+renderMkrs(T);
+</script>
+</body>
+</html>
